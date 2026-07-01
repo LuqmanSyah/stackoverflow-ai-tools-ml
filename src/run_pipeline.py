@@ -18,11 +18,17 @@ from evaluate_models import (
     evaluate_classification_models,
     plot_cluster_distribution,
     plot_confusion_matrices,
+    plot_gmm_metrics,
     plot_kmeans_metrics,
     plot_model_comparison,
     save_classification_outputs,
 )
-from train_models import run_kmeans_analysis, summarize_clusters, train_classification_models
+from train_models import (
+    run_gmm_analysis,
+    run_kmeans_analysis,
+    summarize_clusters,
+    train_classification_models,
+)
 
 
 def main() -> None:
@@ -65,7 +71,8 @@ def main() -> None:
         {"feature_group": list(feature_groups.keys()), "columns": list(feature_groups.values())}
     ).to_csv(tables_dir / "preprocessing_feature_groups.csv", index=False)
 
-    print("Menjalankan K-Means...")
+    # ---- Unsupervised: K-Means (Traditional) ----
+    print("\n=== K-Means Clustering (Traditional) ===")
     kmeans_result = run_kmeans_analysis(X, preprocessor, k_values=range(2, 11))
     kmeans_metrics = kmeans_result["metrics"]
     best_k = kmeans_result["best_k"]
@@ -79,7 +86,23 @@ def main() -> None:
     plot_cluster_distribution(cluster_summary, output_root)
     print(f"K-Means selesai. k terpilih: {best_k}")
 
-    print("Melatih Random Forest dan Linear SVM...")
+    # ---- Unsupervised: GMM (Modern Probabilistic) ----
+    print("\n=== GMM Clustering (Modern — Probabilistic) ===")
+    gmm_result = run_gmm_analysis(X, preprocessor, k_values=range(2, 9))
+    gmm_metrics = gmm_result["metrics"]
+    gmm_best_k = gmm_result["best_k"]
+
+    gmm_metrics.to_csv(tables_dir / "gmm_bic_silhouette.csv", index=False)
+    plot_gmm_metrics(gmm_metrics, output_root)
+
+    gmm_cluster_summary = summarize_clusters(X, gmm_result["labels"])
+    gmm_cluster_summary.to_csv(tables_dir / "gmm_cluster_summary.csv", index=False)
+    plot_cluster_distribution(gmm_cluster_summary, output_root)
+    print(f"GMM selesai. k terpilih: {gmm_best_k}")
+
+    # ---- Supervised: Classification Models ----
+    print("\n=== Melatih Model Klasifikasi ===")
+    print("Model: Random Forest (Traditional), Linear SVM (Traditional), XGBoost (Modern), MLP (Modern)")
     models, split_data = train_classification_models(X, y, preprocessor, test_size=0.2)
     classification_results = evaluate_classification_models(
         models,
@@ -111,12 +134,22 @@ def main() -> None:
 - Fitur kandidat yang tidak tersedia: {', '.join(metadata['missing_features']) if metadata['missing_features'] else '-'}.
 - Kolom AI tidak dipakai sebagai input untuk menghindari data leakage.
 
-## K-Means Clustering
+## Unsupervised Learning — Segmentasi Developer
+
+### K-Means (Traditional — Hard Clustering)
 - Rentang k diuji: 2 sampai 10.
 - Nilai k terpilih berdasarkan silhouette score tertinggi: {best_k}.
 - Tabel interpretasi cluster: outputs/tables/cluster_summary.csv.
 
-## Evaluasi Model Klasifikasi
+### GMM (Modern — Probabilistic Soft Clustering)
+- Rentang k diuji: 2 sampai 10.
+- Nilai k terpilih berdasarkan silhouette score tertinggi: {gmm_best_k}.
+- Tabel interpretasi cluster: outputs/tables/gmm_cluster_summary.csv.
+
+## Supervised Learning — Klasifikasi AI Usage
+Model dilatih: Random Forest (Traditional), Linear SVM (Traditional), XGBoost (Modern), MLP Neural Network (Modern).
+
+### Evaluasi Model Klasifikasi
 - Model terbaik berdasarkan F1-score: {best_model_row['model']}.
 - Accuracy: {best_model_row['accuracy']:.4f}.
 - Precision: {best_model_row['precision']:.4f}.
@@ -126,8 +159,8 @@ def main() -> None:
 """
 
     (reports_dir / "bab_iv_ringkasan_awal.md").write_text(summary_text, encoding="utf-8")
-    print(comparison_df)
-    print(f"Ringkasan BAB IV disimpan ke: {reports_dir / 'bab_iv_ringkasan_awal.md'}")
+    print(f"\n{comparison_df}")
+    print(f"\nRingkasan BAB IV disimpan ke: {reports_dir / 'bab_iv_ringkasan_awal.md'}")
 
 
 if __name__ == "__main__":

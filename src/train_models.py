@@ -9,17 +9,20 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import silhouette_score
+from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import train_test_split
+from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
+from xgboost import XGBClassifier
 
 from data_preprocessing import RANDOM_STATE
 
 
-def build_classification_models(preprocessor) -> dict[str, Pipeline]:
-    """Create baseline classification models with the same preprocessing."""
-    return {
+def build_classification_models(preprocessor, y_train=None) -> dict[str, Pipeline]:
+    """Create classification models: traditional (RF, SVM) and modern (XGBoost, MLP)."""
+    models = {
         "Random Forest": Pipeline(
             steps=[
                 ("preprocess", clone(preprocessor)),
@@ -49,6 +52,46 @@ def build_classification_models(preprocessor) -> dict[str, Pipeline]:
         ),
     }
 
+    scale_pos_weight = 1.0
+    if y_train is not None:
+        neg, pos = y_train.value_counts().sort_index().values
+        scale_pos_weight = neg / pos if pos > 0 else 1.0
+
+    models["XGBoost"] = Pipeline(
+        steps=[
+            ("preprocess", clone(preprocessor)),
+            (
+                "model",
+                XGBClassifier(
+                    n_estimators=200,
+                    learning_rate=0.1,
+                    max_depth=6,
+                    scale_pos_weight=scale_pos_weight,
+                    random_state=RANDOM_STATE,
+                    eval_metric="logloss",
+                    verbosity=0,
+                ),
+            ),
+        ]
+    )
+
+    models["MLP"] = Pipeline(
+        steps=[
+            ("preprocess", clone(preprocessor)),
+            (
+                "model",
+                MLPClassifier(
+                    hidden_layer_sizes=(100, 50),
+                    max_iter=500,
+                    early_stopping=True,
+                    random_state=RANDOM_STATE,
+                ),
+            ),
+        ]
+    )
+
+    return models
+
 
 def train_classification_models(
     X: pd.DataFrame,
@@ -65,7 +108,7 @@ def train_classification_models(
         stratify=y,
     )
 
-    models = build_classification_models(preprocessor)
+    models = build_classification_models(preprocessor, y_train=y_train)
     for model in models.values():
         model.fit(X_train, y_train)
 
@@ -139,6 +182,70 @@ def run_kmeans_analysis(
         "best_k": best_k,
         "labels": final_labels,
         "model": final_model,
+    }
+
+
+def run_gmm_analysis(
+    X: pd.DataFrame,
+    preprocessor,
+    k_values: range = range(2, 9),
+    n_svd_components: int = 30,
+) -> dict:
+    """Run GMM clustering with SVD + scaling for comparison with K-Means.
+
+    GMM is a probabilistic clustering algorithm that assigns each point a
+    probability of belonging to each cluster (soft clustering).
+    """
+    X_processed = clone(preprocessor).fit_transform(X)
+
+    max_components = min(n_svd_components, X_processed.shape[0] - 1, X_processed.shape[1] - 1)
+    if max_components < 2:
+        X_cluster = X_processed.toarray() if hasattr(X_processed, "toarray") else X_processed
+        svd = None
+    else:
+        svd = TruncatedSVD(n_components=max_components, random_state=RANDOM_STATE)
+        X_cluster = svd.fit_transform(X_processed)
+
+    scaler = StandardScaler()
+    X_cluster = scaler.fit_transform(X_cluster)
+
+    metrics = []
+    for k in k_values:
+        model = GaussianMixture(n_components=k, random_state=RANDOM_STATE, n_init=3)
+        model.fit(X_cluster)
+        labels = model.predict(X_cluster)
+
+        sample_size = min(5000, X_cluster.shape[0])
+        silhouette = silhouette_score(
+            X_cluster,
+            labels,
+            sample_size=sample_size,
+            random_state=RANDOM_STATE,
+        )
+        metrics.append(
+            {
+                "k": k,
+                "bic": model.bic(X_cluster),
+                "aic": model.aic(X_cluster),
+                "silhouette_score": silhouette,
+            }
+        )
+
+    metrics_df = pd.DataFrame(metrics)
+    best_k = int(metrics_df.sort_values("silhouette_score", ascending=False).iloc[0]["k"])
+
+    final_model = GaussianMixture(n_components=best_k, random_state=RANDOM_STATE, n_init=3)
+    final_labels = final_model.fit_predict(X_cluster)
+
+    return {
+        "X_cluster": X_cluster,
+        "svd": svd,
+        "scaler": scaler,
+        "metrics": metrics_df,
+        "best_k": best_k,
+        "labels": final_labels,
+        "model": final_model,
+        "probabilities": final_model.predict_proba(X_cluster),
     }
 
 

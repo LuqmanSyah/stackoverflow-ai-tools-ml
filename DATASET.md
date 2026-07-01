@@ -10,7 +10,7 @@ data/survey_results_public_2025.csv
 survey_results_public_2025.csv
 ```
 
-Pipeline akan mencari dataset secara otomatis menggunakan urutan lokasi tersebut.
+Pipeline akan mencari dataset secara otomatis menggunakan urutan lokasi tersebut. Nama file yang digunakan adalah `survey_{tahun}.csv` (contoh: `survey_2025.csv`).
 
 Untuk dataset lokal saat project dibuat:
 

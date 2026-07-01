@@ -161,3 +161,25 @@ def plot_cluster_distribution(cluster_summary: pd.DataFrame, output_root: str | 
     plt.tight_layout()
     plt.savefig(figures_dir / "cluster_distribution.png", dpi=150)
     plt.close()
+
+
+def plot_gmm_metrics(metrics_df: pd.DataFrame, output_root: str | Path) -> None:
+    """Save GMM BIC/AIC and silhouette plots."""
+    figures_dir = Path(output_root) / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+    sns.lineplot(data=metrics_df, x="k", y="bic", marker="o", ax=axes[0], label="BIC")
+    sns.lineplot(data=metrics_df, x="k", y="aic", marker="o", ax=axes[0], label="AIC")
+    axes[0].set_title("GMM: BIC / AIC")
+    axes[0].set_xlabel("Jumlah Komponen (k)")
+    axes[0].set_ylabel("Nilai")
+
+    sns.lineplot(data=metrics_df, x="k", y="silhouette_score", marker="o", ax=axes[1])
+    axes[1].set_title("GMM: Silhouette Score")
+    axes[1].set_xlabel("Jumlah Komponen (k)")
+    axes[1].set_ylabel("Silhouette Score")
+
+    plt.tight_layout()
+    plt.savefig(figures_dir / "gmm_bic_silhouette.png", dpi=150)
+    plt.close()

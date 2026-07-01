@@ -76,12 +76,13 @@ AI_LEAKAGE_COLUMNS = {
 
 
 def find_dataset_path(project_root: str | Path, year: int = 2025) -> Path:
-    """Find the survey CSV for a given year using common local locations."""
+    """Find the survey CSV for a given year (supports survey_{year}.csv and survey_results_public_{year}.csv)."""
     root = Path(project_root)
     candidates = [
         root / "Survey" / "packages" / "archive" / str(year) / "results.csv",
         root / "data" / f"survey_results_public_{year}.csv",
         root / f"survey_results_public_{year}.csv",
+        root / "data" / f"survey_{year}.csv",
     ]
     for path in candidates:
         if path.exists():
